@@ -44,18 +44,25 @@
         select visit_attribute_type_id from visit_attribute_type where name="Admission Status"
         ) and va.voided = 0
         where v.date_stopped is null AND v.voided = 0
-        and v.patient_id not in (
-        select distinct person_id from obs
-        join encounter on encounter.encounter_id = obs.encounter_id
-        join visit on encounter.visit_id = visit.visit_id
-        where visit.date_stopped is null
-        AND DATE(obs.date_created) = CURDATE()
-        ) or v.patient_id in (
-        select distinct person_id from obs
-        join encounter on encounter.encounter_id = obs.encounter_id
-        join visit on encounter.visit_id = visit.visit_id
-        where visit.date_stopped is null and obs.concept_id = (select concept_id from concept where uuid = "773d36e9-119e-452c-91ee-4ac90245e504")
-        AND DATE(obs.date_created) = CURDATE()
+
+        AND v.patient_id IN (
+        select o.person_id from obs o where o.obs_id in (select obs_group_id from obs, concept_set cs where obs.concept_id = cs.concept_id AND cs.concept_set=6240) and o.concept_id=6240
+        AND (DATE(o.date_created) = CURDATE() OR DATE(o.date_created) IS NULL) AND o.voided = 0 -- PATIENT WITH VITALS AND HAVE OTHER OBS
+        UNION
+        SELECT v.patient_id from visit v where v.patient_id NOT IN (SELECT v.patient_id FROM obs o
+        LEFT JOIN visit v ON v.patient_id = o.person_id
+        WHERE DATE(v.date_started) = CURDATE() AND DATE(v.date_stopped) IS NULL
+        AND (DATE(o.date_created) = CURDATE() OR DATE(o.date_created) IS NULL)
+        AND DATE(o.obs_datetime) = CURDATE()
+        -- AND o.obs_id IS NULL
+        AND v.voided = 0) AND DATE(v.date_started) = CURDATE() AND DATE(v.date_stopped) IS NULL -- PATIENT VISIT OPEN WTH NO OBS TODAY
+        )
+        AND v.patient_id NOT IN (
+        SELECT o.person_id FROM obs o where o.obs_id in (
+        SELECT obs.obs_group_id FROM obs, concept_set cs WHERE obs.concept_id = cs.concept_id AND cs.concept_set != 6240 AND (DATE(obs.date_created) = CURDATE() OR DATE(obs.date_created) IS NULL)
+        AND obs.voided = 0 AND obs.obs_group_id is not null) AND concept_id not in (
+        SELECT obs.concept_id FROM obs, concept_set cs WHERE obs.concept_id = cs.concept_id AND cs.concept_set = 6240 AND (DATE(obs.date_created) = CURDATE() OR DATE(obs.date_created) IS NULL)
+        ) AND o.concept_id != 6240 AND (DATE(o.date_created) = CURDATE() OR DATE(o.date_created) IS NULL) AND o.voided = 0
         )
         order by v.date_started asc
       </value>
